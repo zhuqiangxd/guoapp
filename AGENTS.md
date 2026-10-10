@@ -28,7 +28,7 @@
 
 功能版本递增 `pubspec.yaml` 的版本号和构建号。源码恢复以版本号、源码压缩包和 README 记录为依据；未通过检查的代码不得标为已完成版本。
 
-如果正在 `guoapp` 本身工作，不向自身同步；脚本会跳过此情况。不要为了同步另建临时源码副本。
+如果正在 `guoapp` 本身工作，`sync_source.py` 会打印提示并跳过同步；`finish_task.py` 同样跳过同步，但仍会在 `guoapp` 的上级目录生成 `真果·鉴-YYYYMMDDHHMM.zip`，不需要压缩包时不要执行它。不要为了同步另建临时源码副本。
 
 ## 代码与资料
 
@@ -36,6 +36,14 @@
 
 不新增解释性代码注释，必要的编译或工具指令除外。采用清晰命名和模块边界。不要提交密钥、个人配置、下载的视频、SDK 或构建缓存。
 
+仓库中仍跟踪 `android/duanju_release.keystore`、`android/app/duanju_release.keystore` 和 `android/key.properties`，它们在 `.gitignore` 生效前就已提交。三者不在 `scripts/sync_source.py` 的收录范围内，同步出的镜像不会包含；不要新增同类文件，也不要把现有密钥当作可用发布凭据。
+
 不要查看、下载、分析或处理站源图片。页面可正常显示海报地址；开发验证使用合成数据或拦截图片请求。用户直接提供的界面截图可以查看。
 
 遵守先实现后集中验证的节奏；未经用户明确要求，不启动子 AGENT。
+
+## 本机环境
+
+当前工作副本在 Windows 上，shell 为 Windows PowerShell 5.1（无 `pwsh`）。`python`、`python3` 指向应用商店占位程序，直接调用会以 9009 失败；改用 `py -3`（Python 3.13.3）。本文与 README.md 中的 `python3 scripts/xxx.py` 在此统一按 `py -3 scripts/xxx.py` 执行，`scripts/build_windows.ps1` 内部的 `python` 调用同理。
+
+flutter、dart、go、adb、java 未安装，`scripts/build_*.py`、`scripts/smoke_windows.py` 以及 README.md「集中检查与真机回归」里的命令在本机无法运行。不要声称在本机执行过构建或测试；构建、分析与真机结论只能来自源码阅读、`scripts` 下的 Python 脚本，或用户提供的设备结果。

@@ -41,7 +41,7 @@ class SourceSite {
   /// 默认可见的站源：红果、韩小圈、鬼片网、青空次元。
   static const primaryValues = [hongguo, hanxiaoquan, guipian, sorani];
 
-  /// 敏感站源：默认隐藏，输入解锁密码后才显示。
+  /// 敏感站源：默认隐藏，输入解锁密码后才显示；多源包不隐藏。
   static const restrictedValues = [
     SourceSite('huangdou', '黄豆', '精选短剧'),
     SourceSite('huangju', '剧果', '热门 · 最新 · 分类短剧'),
@@ -54,6 +54,10 @@ class SourceSite {
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
   static const values = allSourcesEnabled ? knownValues : [hongguo];
+
+  /// 多源包（`--all-sources`，真果鉴）不设站源权限门槛：
+  /// 不校验管理员身份，也不要求输入密码解锁 [restrictedValues]。
+  static const unrestrictedSources = allSourcesEnabled;
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
   static bool isPrimary(String id) =>
@@ -61,10 +65,11 @@ class SourceSite {
   static bool isRestricted(String id) =>
       restrictedValues.any((site) => site.id == id);
 
-  /// 运行时可见站源：未解锁时只保留 [primaryValues]。
+  /// 运行时可见站源：未解锁时只保留 [primaryValues]；
+  /// [unrestrictedSources] 时无条件返回全部站源。
   static List<SourceSite> visibleValues({required bool unlocked}) => [
     for (final site in values)
-      if (unlocked || isPrimary(site.id)) site,
+      if (unrestrictedSources || unlocked || isPrimary(site.id)) site,
   ];
   static SourceSite byId(String id) =>
       allValues.firstWhere((site) => site.id == id, orElse: () => hongguo);

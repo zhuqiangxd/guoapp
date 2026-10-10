@@ -132,11 +132,12 @@ class LocalStore extends ChangeNotifier {
   }
 
   bool get canDownload => !locked && (profile.admin || profile.download);
-  bool allowsSource(String source) =>
-      !locked &&
-      SourceSite.isAvailable(source) &&
-      profile.allows(source) &&
-      (_gateOff || _sourcesUnlocked || SourceSite.isPrimary(source));
+  bool allowsSource(String source) {
+    if (locked || !SourceSite.isAvailable(source)) return false;
+    if (SourceSite.unrestrictedSources) return true;
+    return profile.allows(source) &&
+        (_gateOff || _sourcesUnlocked || SourceSite.isPrimary(source));
+  }
   List<SourceSite> get sources => SourceSite.visibleValues(
     unlocked: _gateOff || _sourcesUnlocked,
   ).where((site) => allowsSource(site.id)).toList();
