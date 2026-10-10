@@ -107,7 +107,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _fullscreen = false;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
-  int _mobileTab = 0;
   bool _autoAdvance = true;
   bool? _systemFullscreen;
   Orientation? _lastOrientation;
@@ -142,6 +141,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _downloadAvailable =>
+      widget.repository.supportsDownloads &&
+      widget.store.canDownload &&
+      widget.mediaId == null;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
   PlaybackPreferences get _preferences => PlaybackPreferences(
@@ -1331,6 +1334,47 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _openEpisodesPanel() => _mobile
+      ? _openMobilePlaybackSheet(tab: 0)
+      : _openPanel(PlayerMenuSection.episodes);
+
+  Future<void> _openSynopsisSheet() => _openMobilePlaybackSheet(tab: 1);
+
+  Future<void> _openDownloadSheet() => _openMobilePlaybackSheet(tab: 2);
+
+  Future<void> _openMobilePlaybackSheet({int tab = 0}) async {
+    if (_panelOpen || _closed) return;
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black54,
+        builder: (_) => Theme(
+          data: AppTheme.dark,
+          child: _MobilePlaybackSheet(
+            initialTab: tab,
+            episodes: widget.detail.episodes,
+            currentIndex: _index,
+            synopsis: (_) => _mobileSynopsis(),
+            download: (_) => _mobileDownload(),
+            onSelected: (index) {
+              Navigator.of(context).pop();
+              if (index != _index) unawaited(_play(index));
+            },
+          ),
+        ),
+      );
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
   Future<void> _seekTo(Duration target) async {
     if (_closed || _loading || _error != null) return;
     _handoffOwned = false;
@@ -1551,7 +1595,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture
+            backgroundColor: fullscreen || pictureInPicture || _mobile
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
             appBar: pictureInPicture || fullscreen || _mobile
@@ -1601,18 +1645,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                           );
                         }
                         if (_mobile) {
-                          final height = (constraints.maxWidth / _aspectRatio)
-                              .clamp(0.0, constraints.maxHeight * .56);
-                          return Column(
-                            children: [
-                              SizedBox(
-                                height: height,
-                                width: double.infinity,
-                                child: _videoPane(context),
-                              ),
-                              Expanded(child: _mobilePlaybackPanel()),
-                            ],
-                          );
+                          return _videoPane(context);
                         }
                         final height = (constraints.maxWidth / _aspectRatio)
                             .clamp(0.0, constraints.maxHeight * .64);
@@ -1681,9 +1714,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             showDanmaku: widget.detail.drama.source == 'hongguo',
             danmakuEnabled: _danmakuEnabled,
             danmakuStatus: _danmaku.status,
-            onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
+            onEpisodes: _openEpisodesPanel,
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
+            favorite: widget.store.following(widget.detail.drama.id) != null,
+            onFavorite: _mobile ? _toggleFavorite : null,
+            onDownload: _downloadAvailable ? _openDownloadSheet : null,
+            onTitleTap: _mobile ? _openSynopsisSheet : null,
             onDanmaku: widget.detail.drama.source == 'hongguo'
                 ? _toggleDanmaku
                 : null,
@@ -1807,8 +1844,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                         ),
                         const Spacer(),
                         TextButton(
-                          onPressed: () =>
-                              _openPanel(PlayerMenuSection.episodes),
+                          onPressed: _openEpisodesPanel,
                           child: const Text('选集'),
                         ),
                       ],
@@ -1847,78 +1883,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             ],
           );
         },
-      ),
-    );
-  }
-
-  Widget _mobilePlaybackPanel() {
-    final colors = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _mobileTabs(colors),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _mobileTab == 0
-                      ? _episodePanel(compact: true)
-                      : _mobileTab == 1
-                      ? _mobileSynopsis()
-                      : _mobileDownload(),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _mobileTabs(ColorScheme colors) => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
-    child: SizedBox(
-      height: 42,
-      child: Row(
-        children: [
-          _mobileTabButton(0, '选集'),
-          _mobileTabButton(1, '简介'),
-          _mobileTabButton(2, '下载'),
-        ],
-      ),
-    ),
-  );
-
-  Widget _mobileTabButton(int value, String label) {
-    final selected = _mobileTab == value;
-    final colors = Theme.of(context).colorScheme;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _mobileTab = value),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? colors.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? colors.onSurface : colors.onSurfaceVariant,
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -2099,4 +2063,118 @@ class _PlayerScreenState extends State<PlayerScreen>
       onSelected: (index) => _play(index),
     ),
   );
+}
+
+class _MobilePlaybackSheet extends StatefulWidget {
+  const _MobilePlaybackSheet({
+    required this.initialTab,
+    required this.episodes,
+    required this.currentIndex,
+    required this.synopsis,
+    required this.download,
+    required this.onSelected,
+  });
+
+  final int initialTab;
+  final List<Episode> episodes;
+  final int currentIndex;
+  final WidgetBuilder synopsis;
+  final WidgetBuilder download;
+  final ValueChanged<int> onSelected;
+
+  @override
+  State<_MobilePlaybackSheet> createState() => _MobilePlaybackSheetState();
+}
+
+class _MobilePlaybackSheetState extends State<_MobilePlaybackSheet> {
+  static const _labels = ['选集', '简介', '下载'];
+  late int _tab = widget.initialTab;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .62,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: Row(
+                children: [
+                  for (var index = 0; index < _labels.length; index++)
+                    Expanded(child: _tabButton(index)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: _page(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _page() {
+    if (_tab == 0) {
+      return PlayerEpisodeGrid(
+        episodes: widget.episodes,
+        currentIndex: widget.currentIndex,
+        compact: true,
+        title: '剧集',
+        onSelected: widget.onSelected,
+      );
+    }
+    if (_tab == 1) return widget.synopsis(context);
+    return widget.download(context);
+  }
+
+  Widget _tabButton(int index) {
+    final colors = Theme.of(context).colorScheme;
+    final selected = _tab == index;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _tab = index),
+      child: Container(
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? colors.primary : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Text(
+          _labels[index],
+          style: TextStyle(
+            color: selected ? colors.onSurface : colors.onSurfaceVariant,
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
 }

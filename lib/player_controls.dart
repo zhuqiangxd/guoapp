@@ -34,6 +34,10 @@ class PlayerControls extends StatefulWidget {
     this.danmakuStatus = '',
     this.swipeEnabled = false,
     this.panelOpen = false,
+    this.favorite = false,
+    this.onFavorite,
+    this.onDownload,
+    this.onTitleTap,
     this.onSeek,
     this.onDanmaku,
     this.onRetryDanmaku,
@@ -70,6 +74,10 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
+  final bool favorite;
+  final Future<void> Function()? onFavorite;
+  final Future<void> Function()? onDownload;
+  final VoidCallback? onTitleTap;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -297,6 +305,10 @@ class _PlayerControlsState extends State<PlayerControls> {
                                 constraints.maxHeight >=
                                     (widget.swipeEnabled ? 168 : 220))
                               _centerPlayback(state.playing, showSkip: true),
+                            if (widget.swipeEnabled &&
+                                !widget.fullscreen &&
+                                widget.enabled)
+                              _mobileSideRail(),
                             _sideDanmakuControl(),
                             _bottomControls(
                               constraints: constraints,
@@ -337,16 +349,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ? Icons.arrow_back_rounded
                   : Icons.arrow_back_ios_new_rounded,
             ),
-            if (!compact)
-              Expanded(
-                child: Text(
-                  widget.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              )
-            else
-              const Spacer(),
+            Expanded(child: _titleLabel()),
             if (compact)
               _overlayIconButton(
                 tooltip: '旋转与全屏',
@@ -354,6 +357,35 @@ class _PlayerControlsState extends State<PlayerControls> {
                 icon: Icons.screen_rotation_alt_rounded,
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _titleLabel() {
+    final text = Text(
+      widget.title,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: widget.swipeEnabled
+          ? const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)
+          : null,
+    );
+    if (widget.onTitleTap == null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: text,
+      );
+    }
+    return Tooltip(
+      message: '剧集简介',
+      child: GestureDetector(
+        key: const ValueKey('player-title'),
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTitleTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+          child: text,
         ),
       ),
     );
@@ -415,6 +447,9 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   Widget _sideDanmakuControl() {
     if (!widget.showDanmaku) return const SizedBox.shrink();
+    if (widget.swipeEnabled && !widget.fullscreen) {
+      return const SizedBox.shrink();
+    }
     return Align(
       alignment: Alignment.centerRight,
       child: Padding(
@@ -722,7 +757,9 @@ class _PlayerControlsState extends State<PlayerControls> {
         : widget.danmakuStatus,
     visualWidth: 36,
     selected: widget.danmakuEnabled,
-    onPressed: widget.enabled
+    onPressed:
+        widget.enabled &&
+            (widget.onRetryDanmaku != null || widget.onDanmaku != null)
         ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
         : null,
     child: widget.onRetryDanmaku != null
@@ -739,6 +776,108 @@ class _PlayerControlsState extends State<PlayerControls> {
             ),
           ),
   );
+
+  Widget _mobileSideRail() {
+    final actions = <Widget>[
+      if (widget.onFavorite != null)
+        _railButton(
+          key: const ValueKey('player-rail-favorite'),
+          tooltip: widget.favorite ? '取消追剧' : '加入追剧',
+          icon: widget.favorite
+              ? Icons.bookmark_rounded
+              : Icons.bookmark_add_outlined,
+          label: widget.favorite ? '已追' : '追剧',
+          selected: widget.favorite,
+          onPressed: widget.enabled
+              ? () => unawaited(widget.onFavorite!())
+              : null,
+        ),
+      if (widget.onDownload != null)
+        _railButton(
+          key: const ValueKey('player-rail-download'),
+          tooltip: '下载',
+          icon: Icons.download_rounded,
+          label: '下载',
+          onPressed: widget.enabled
+              ? () => unawaited(widget.onDownload!())
+              : null,
+        ),
+      _railButton(
+        key: const ValueKey('player-rail-episodes'),
+        tooltip: '选集',
+        icon: Icons.video_library_rounded,
+        label: '选集',
+        onPressed: widget.enabled ? () => _panel(widget.onEpisodes) : null,
+      ),
+    ];
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: Column(mainAxisSize: MainAxisSize.min, children: actions),
+      ),
+    );
+  }
+
+  Widget _railButton({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool selected = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = selected
+        ? scheme.primary
+        : Colors.white.withValues(alpha: onPressed == null ? .4 : .94);
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        enabled: onPressed != null,
+        label: tooltip,
+        child: GestureDetector(
+          key: key,
+          behavior: HitTestBehavior.opaque,
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .38),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? scheme.primary.withValues(alpha: .72)
+                          : Colors.white.withValues(alpha: .12),
+                    ),
+                  ),
+                  child: Icon(icon, size: 21, color: foreground),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w600,
+                    color: foreground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _desktopControlRow({
     required bool fullscreen,
@@ -826,6 +965,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
         width: 52,
       ),
+      if (widget.showDanmaku) _danmakuTool(),
       if (widget.onPush != null)
         _lanPushTool(const ValueKey('fullscreen-lan-push')),
       if (fullscreen)
@@ -844,6 +984,14 @@ class _PlayerControlsState extends State<PlayerControls> {
               ? () => _panel(widget.onPictureInPicture!)
               : null,
         ),
+      _toolIcon(
+        key: const ValueKey('player-fullscreen'),
+        tooltip: fullscreen ? '退出全屏' : '旋转与全屏',
+        icon: fullscreen
+            ? Icons.fullscreen_exit_rounded
+            : Icons.fullscreen_rounded,
+        onPressed: widget.onFullscreen,
+      ),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
