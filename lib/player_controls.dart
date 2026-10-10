@@ -163,7 +163,13 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   void _interactionChanged() {
-    if (mounted && widget.interactions.feedback.isNotEmpty) _show();
+    if (!mounted) return;
+    if (widget.interactions.boosting) {
+      if (_visible) setState(() => _visible = false);
+      _hideTimer?.cancel();
+      return;
+    }
+    if (widget.interactions.feedback.isNotEmpty) _show();
   }
 
   void _scheduleHide() {
@@ -240,7 +246,6 @@ class _PlayerControlsState extends State<PlayerControls> {
                 widget.interactions.pointerDown(
                   event,
                   swipeEnabled: widget.swipeEnabled,
-                  width: constraints.maxWidth,
                   height: constraints.maxHeight,
                 );
               },
@@ -355,6 +360,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                 tooltip: '旋转与全屏',
                 onPressed: widget.onFullscreen,
                 icon: Icons.screen_rotation_alt_rounded,
+                size: 34,
               ),
           ],
         ),
@@ -395,19 +401,20 @@ class _PlayerControlsState extends State<PlayerControls> {
     required String tooltip,
     required VoidCallback? onPressed,
     required IconData icon,
+    double size = 42,
   }) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 2),
     child: DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: .36),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(size / 2),
       ),
       child: IconButton(
         tooltip: tooltip,
-        constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+        constraints: BoxConstraints.tightFor(width: size, height: size),
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        icon: Icon(icon),
+        icon: Icon(icon, size: size * 0.55),
       ),
     ),
   );
@@ -1138,67 +1145,10 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget _gestureFeedback() => AnimatedBuilder(
     animation: widget.interactions,
     builder: (context, _) {
-      final hud = widget.interactions.hudState;
       final feedback = widget.interactions.feedback;
-      if (hud.type == SwipeAction.brightness) {
-        final value = hud.value.clamp(0.0, 1.0);
-        final percent = (value * 100).round();
-        final icon = value < 0.33
-            ? Icons.brightness_low_rounded
-            : value < 0.66
-                ? Icons.brightness_medium_rounded
-                : Icons.brightness_high_rounded;
-        return IgnorePointer(
-          child: Center(
-            child: Container(
-              width: 120,
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: .75),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: .15), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: .4),
-                    blurRadius: 18,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: Colors.white, size: 36),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: 70,
-                    height: 6,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: LinearProgressIndicator(
-                        value: value,
-                        backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '亮度 $percent%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+      if (feedback.isEmpty || widget.interactions.boosting) {
+        return const SizedBox.shrink();
       }
-      if (feedback.isEmpty) return const SizedBox.shrink();
       return IgnorePointer(
         child: Align(
           alignment: const Alignment(0, -.5),
