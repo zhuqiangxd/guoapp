@@ -194,9 +194,14 @@ class LunaExoPlayer implements Player {
     VideoPlayerController c;
     if (url.startsWith('/') || (uri != null && uri.scheme == 'file')) {
       final filePath = uri != null && uri.scheme == 'file' ? uri.toFilePath() : url;
+      final localFile = File(filePath);
+      final exists = localFile.existsSync();
+      DiaryService.add(
+        '[ExoPlayer] 本地文件检查: exists=$exists, '
+        'size=${exists ? localFile.lengthSync() : 0}, path=$filePath');
       DiaryService.add('[ExoPlayer] 本地文件播放: $filePath');
       c = VideoPlayerController.file(
-        File(filePath),
+        localFile,
         videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
     } else {
@@ -215,6 +220,7 @@ class LunaExoPlayer implements Player {
           '[ExoPlayer] c.initialize() 成功! duration=${c.value.duration}, size=${c.value.size}, isInitialized=${c.value.isInitialized}');
     } catch (e, stack) {
       DiaryService.add('[ExoPlayer] 首次 initialize 失败: $e');
+      DiaryService.add('[ExoPlayer] 播放器错误详情: ${c.value.errorDescription}');
       // 如果首次尝试失败，且为网络视频，则原地使用交替格式（HLS <-> MP4）自愈重试
       if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
         final alternateFormat = formatHint == VideoFormat.hls ? null : VideoFormat.hls;
@@ -239,6 +245,7 @@ class LunaExoPlayer implements Player {
           DiaryService.add('[ExoPlayer] 自愈重试成功! duration=${c.value.duration}');
         } catch (retryErr, retryStack) {
           DiaryService.add('[ExoPlayer] 自愈重试依然失败! 异常: $retryErr\n堆栈: $retryStack');
+          DiaryService.add('[ExoPlayer] 重试错误详情: ${c.value.errorDescription}');
           if (myGen == _openGeneration) {
             _safeAdd(stream.errorController, retryErr.toString());
           }
@@ -249,6 +256,7 @@ class LunaExoPlayer implements Player {
         }
       } else {
         DiaryService.add('[ExoPlayer] c.initialize() 失败! 异常: $e\n堆栈: $stack');
+        DiaryService.add('[ExoPlayer] 播放器错误详情: ${c.value.errorDescription}');
         if (myGen == _openGeneration) {
           _safeAdd(stream.errorController, e.toString());
         }
